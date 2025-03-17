@@ -1,19 +1,6 @@
 
 # ====== Cultural Evolution ======
 
-# tests :
-appeal_scores <- c(-0.2, 0.6, 1.1, 0.01, 0.99)
-items <- c(1, 2, 3, 4, 5)
-# After clamping:
-appeal_scores <- pmax(pmin(appeal_scores, 0.99), 0.01)
-print(appeal_scores)  # [0.01, 0.60, 0.99, 0.01, 0.99]
-
-appeal_scores <- 1 - appeal_scores
-appeal_scores
-appeal_scores <- appeal_scores/sum(appeal_scores)
-appeal_scores
-ba <- sample(items, 1, prob = appeal_scores)
-ba
 
 ## Library import ====
 
@@ -31,18 +18,16 @@ library(lattice)
 
 num_agents <- 200
 num_items <- 20
-num_generations <- 50
+num_generations <- 100
+burn_in <- 0
 
 transmission_rate <- 0.8 # between 0 and 1
 mutation_rate <- 0.01
 
 set_quota <- TRUE
-quota_mean <- 5
+quota_mean <- 14
 
-set_appeal <- FALSE
-appeal_mean <- 0.4  # between 0 and 1
-
-burn_in <- 0
+set_appeal <- TRUE # appeal_mean is now directly written in the code
 
 
 ## Cultural evolution simulation ====
@@ -64,8 +49,7 @@ if(set_quota) {
 ### Initialize appeal scores if enabled ----
 if(set_appeal) {
   # Generate scores with normal distribution and clamp to (0,1)
-  std_dev_a <- appeal_mean/2
-  appeal_scores <- rnorm(num_items, mean = appeal_mean, sd = std_dev_a)
+  appeal_scores <- rnorm(num_items, mean = 0.5, sd = 0.25)
   appeal_scores <- pmax(pmin(appeal_scores, 0.99), 0.01)
   names(appeal_scores) <- paste0("item_", 1:num_items)
   print(appeal_scores)
@@ -76,43 +60,26 @@ for(gen in 1:burn_in) {
   
   # Mutation process
   for(agent in 1:num_agents) {
-    # 0 to 1 mutation
-    if(runif(1) < mutation_rate) {
-      available_0 <- which(binary_matrix[agent, ] == 0)
-      if(length(available_0) > 0) {
-        binary_matrix[agent, sample(available_0, 1)] <- 1
-      }
-    }
-    # 1 to 0 mutation
-    if(runif(1) < mutation_rate) {
-      available_1 <- which(binary_matrix[agent, ] == 1)
-      if(length(available_1) > 0) {
-        binary_matrix[agent, sample(available_1, 1)] <- 0
-      }
-    }
-  }
-}
+    for(item in 1:num_items) {
+      if (runif(1) < mutation_rate){
+        if (binary_matrix[agent, item]==0){
+          binary_matrix[agent, item] <- 1
+        } else {
+          binary_matrix[agent, item] <- 0
+        } } } } } 
 
 ### Main simulation loop ----
 for(gen in (burn_in + 1):num_generations) {
   
-  # Apply mutations
+  # Apply mutation
   for(agent in 1:num_agents) {
-    # 0 to 1 mutation
-    if(runif(1) < mutation_rate) {
-      available_0 <- which(binary_matrix[agent, ] == 0)
-      if(length(available_0) > 0) {
-        binary_matrix[agent, sample(available_0, 1)] <- 1
-      }
-    }
-    # 1 to 0 mutation
-    if(runif(1) < mutation_rate) {
-      available_1 <- which(binary_matrix[agent, ] == 1)
-      if(length(available_1) > 0) {
-        binary_matrix[agent, sample(available_1, 1)] <- 0
-      }
-    }
-  }
+    for(item in 1:num_items) {
+      if (runif(1) < mutation_rate){
+        if (binary_matrix[agent, item]==0){
+          binary_matrix[agent, item] <- 1
+        } else {
+          binary_matrix[agent, item] <- 0
+        } } } } }
   
   ### Pairwise interactions ----
   num_pairs <- ceiling(transmission_rate * num_agents^2)
@@ -196,9 +163,9 @@ for(gen in (burn_in + 1):num_generations) {
   }
 }
 
-
 ## Calculate final results ####
 item_prevalence <- colSums(binary_matrix)
+inventory_size <- rowSums(binary_matrix)
 binary_matrix_df <- as.data.frame(binary_matrix)
 colnames(binary_matrix_df) <- paste0("Item_", 1:num_items)
 rownames(binary_matrix_df) <- paste0("Agent_", 1:num_agents)
@@ -244,15 +211,97 @@ p2 <- plot_matrix(ordered_matrix, "Sorted Matrix")
 grid.arrange(p1, p2, ncol = 2)
 
 
-### Saving plots ----
+## Plot rarity, prevalence, frequency ####
+
+### 1. Item Prevalence Distribution ----
+prevalence_plot <- ggplot(data.frame(Prevalence = item_prevalence), 
+                          aes(x = Prevalence)) +
+  geom_histogram(fill = "olivedrab", color = "olivedrab",
+                 alpha = 0.9, bins = 20) +
+  labs(title = "Item Prevalence Distribution",
+       x = "Number of agentss possessing item",
+       y = "Count") +
+  theme_minimal()
+prevalence_plot
+
+
+### 1. bis. Item prevalence ----
+# Create a data frame with item IDs and their prevalence
+item_data <- data.frame(
+  Item = factor(1:length(item_prevalence)),  # Convert to factor for discrete axis
+  Prevalence = item_prevalence)
+
+prevalence_barplot <- ggplot(item_data, 
+                             aes(x = reorder(Item, -Prevalence), 
+                                 y = Prevalence)) +
+  geom_bar(stat = "identity", fill = "olivedrab", 
+           alpha = 0.9, width = 0.8) +
+  # Add text labels at the top of bars
+  geom_text(aes(label = Prevalence), vjust = -0.5, 
+            color = "olivedrab4", size = 3) +
+  labs(title = "Item Prevalence Distribution",
+       x = "Items",
+       y = "Number of Agents Possessing Item") +
+  theme_minimal() +
+  theme(axis.text.x = element_blank(),  # Remove x-axis text
+        plot.title = element_text(hjust = 0.5)) +
+  scale_y_continuous(expand = expansion(mult = c(0, 0.15)))  # Add space for top labels
+prevalence_barplot
+
+
+### 2. Inventory size Distribution ----
+inventory_plot <- ggplot(data.frame(Inventory = inventory_size), 
+                         aes(x = Inventory)) +
+  geom_histogram(fill = "olivedrab", color = "olivedrab", 
+                 alpha = 0.9, bins = 20) +
+  labs(title = "Inventory size Distribution",
+       x = "Number of items possessed by agents",
+       y = "Count") +
+  theme_minimal()
+inventory_plot
+
+
+### 3. Average Rarity vs Inventory Size ----
+# Calculate item rarity (inverse of prevalence normalized)
+item_rarity <- 1 - (item_prevalence/max(item_prevalence))
+
+# Calculate agent-level metrics
+agent_stats <- data.frame(
+  Agent = rownames(binary_matrix),
+  InventorySize = rowSums(binary_matrix),
+  AvgRarity = apply(binary_matrix, 1, function(x) {
+    mean(item_rarity[which(x == 1)])
+  }))
+
+# Rarity plot
+rarity_plot <- ggplot(agent_stats, aes(x = InventorySize, y = AvgRarity)) +
+  geom_point(color = "olivedrab", alpha = 0.7) +
+  geom_smooth(method = "loess", color = "olivedrab", se = FALSE) +
+  labs(title = "Average Item Rarity vs Inventory Size",
+       x = "Number of items possessed (Inventory Size)",
+       y = "Average Rarity Score") +
+  theme_minimal()
+rarity_plot
+
+
+
+### Save plots ----
 # Create plot directory with timestamp
 plot_dir <- paste0("plots_", format(Sys.time(), "%Y-%m-%d_%H-%M-%S"))
 dir.create(plot_dir)
 
-# Save combined plot
+#Save all above plots
 combined_plot <- grid.arrange(p1, p2, ncol = 2)
 ggsave(file.path(plot_dir, "00_matrices.png"), 
        combined_plot, width = 12, height = 8, dpi = 300)
+ggsave(file.path(plot_dir, "03_item_prevalence_bars.png"), 
+       prevalence_barplot, width = 8, height = 6)
+ggsave(file.path(plot_dir, "04_item_prevalence.png"), 
+       prevalence_plot, width = 8, height = 6)
+ggsave(file.path(plot_dir, "05_inventory_plot.png"), 
+       inventory_plot, width = 8, height = 6)
+ggsave(file.path(plot_dir, "06_rarity_vs_inventory.png"), 
+       rarity_plot, width = 8, height = 6)
 
 
 ## Nestedness tests ####
@@ -295,6 +344,10 @@ print(densityplot(permustats(out_nodf_c0), main = "NODF Permutations - c0"))
 dev.off()
 
 # swap
+# sequential algorithm for binary matrices that changes 
+#the matrix structure, but does not influence marginal sums 
+#(Gotelli & Entsminger 2003). This inspects 2 × 2 submatrices so
+#long that a swap can be done.
 out_nodf_swap <- oecosimu(binary_matrix, nestednodf, "swap", alt = "greater")
 print(out_nodf_swap)
 densityplot(permustats(out_nodf_swap), main = "NODF Permutations - swap")
@@ -311,6 +364,7 @@ densityplot(permustats(out_nodf_cb), main = "NODF Permutations - curveball")
 png(file.path(plot_dir, paste0("01_NODF_cb.png")), width = 800, height = 600)
 print(densityplot(permustats(out_nodf_cb), main = "NODF Permutations - cb"))
 dev.off()
+
 
 ### Temp ----
 # r00
