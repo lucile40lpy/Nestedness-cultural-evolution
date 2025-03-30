@@ -18,24 +18,34 @@ library(lattice)
 
 num_agents <- 200
 num_items <- 20
-num_generations <- 100
-burn_in <- 0
+num_generations <- 20
+burn_in <- 0 # between 0 and num_generations
 
-transmission_rate <- 0.8 # between 0 and 1
-mutation_rate <- 0.01
+transmission_rate <- 0.6 # between 0 and 1
+mutation_rate <- 0.001 # between 0 and 1, has to be very low
 
-set_quota <- TRUE
-quota_mean <- 14
+set_quota <- FALSE
+quota_mean <- 14 # between 0 and num_items
 
-set_appeal <- TRUE # appeal_mean is now directly written in the code
+set_appeal <- FALSE # appeal_mean is now directly written in the code
+set_gateway <- TRUE
+gateway_threshold <- 0.5 # between 0 and 1
 
 
 ## Cultural evolution simulation ====
 
 ### Initialize binary matrix ----
-binary_matrix <- matrix(0, nrow = num_agents, ncol = num_items,
+if(set_gateway) {
+  binary_matrix <- matrix(0, nrow = num_agents, ncol = num_items+1,
                         dimnames = list(paste0("agent_", 1:num_agents),
-                                        paste0("item_", 1:num_items)))
+                                        c(paste0("item_", 1:num_items), "item_0")))
+  binary_matrix[, "item_0"] <- 1
+  
+} else {
+  binary_matrix <- matrix(0, nrow = num_agents, ncol = num_items,
+                          dimnames = list(paste0("agent_", 1:num_agents),
+                                          paste0("item_", 1:num_items)))
+}
 
 ### Assign quotas if enabled ----
 if(set_quota) {
@@ -43,17 +53,16 @@ if(set_quota) {
   quotas <- rnorm(num_agents, mean = quota_mean, sd = std_dev_q)
   quotas <- pmin(pmax(round(quotas), 1), num_items)
   names(quotas) <- paste0("agent_", 1:num_agents)
-  print(quotas)
 }
 
 ### Initialize appeal scores if enabled ----
 if(set_appeal) {
   # Generate scores with normal distribution and clamp to (0,1)
-  appeal_scores <- rnorm(num_items, mean = 0.5, sd = 0.25)
+  appeal_scores <- rnorm(num_items, mean = 0.5, sd = 0.2)
   appeal_scores <- pmax(pmin(appeal_scores, 0.99), 0.01)
   names(appeal_scores) <- paste0("item_", 1:num_items)
-  print(appeal_scores)
 }
+
 
 ### Burn-in period (mutations only) ----
 for(gen in 1:burn_in) {
@@ -63,43 +72,72 @@ for(gen in 1:burn_in) {
     for(item in 1:num_items) {
       if (runif(1) < mutation_rate){
         if (binary_matrix[agent, item]==0){
-          binary_matrix[agent, item] <- 1
+          
+          # Mutation with gateway
+          if (set_gateway) {
+            prev_sum <- sum(binary_matrix[agent, 1:(item-1)]) + 1
+            num_prev <- item - 1
+            # Apply gateway threshold
+            if(num_prev == 0 || prev_sum >= (gateway_threshold * num_prev)) {
+              binary_matrix[agent, item] <- 1
+            }
+          } else {
+            binary_matrix[agent, item] <- 1
+          }
         } else {
           binary_matrix[agent, item] <- 0
-        } } } } } 
+        } } } } }
+
 
 ### Main simulation loop ----
 for(gen in (burn_in + 1):num_generations) {
   
-  # Apply mutation
+  # Mutation process
   for(agent in 1:num_agents) {
     for(item in 1:num_items) {
       if (runif(1) < mutation_rate){
         if (binary_matrix[agent, item]==0){
-          binary_matrix[agent, item] <- 1
+          
+          # Mutation with gateway
+          if (set_gateway) {
+            prev_sum <- sum(binary_matrix[agent, 1:(item-1)]) + 1
+            num_prev <- item - 1
+            # Apply gateway threshold
+            if(prev_sum >= (gateway_threshold * num_prev)) {
+              binary_matrix[agent, item] <- 1
+            }
+          } else {
+            binary_matrix[agent, item] <- 1
+          }
         } else {
           binary_matrix[agent, item] <- 0
-        } } } } }
+        } } } }
   
   ### Pairwise interactions ----
   num_pairs <- ceiling(transmission_rate * num_agents^2)
   shuffled_agents <- sample(rownames(binary_matrix))
   
-  for(pair in 1:num_pairs) {
-    if(2*pair > length(shuffled_agents)) break
-    
+  for(pair in 1:floor(length(shuffled_agents)/2)) {
     agent_A <- shuffled_agents[2*pair - 1]
     agent_B <- shuffled_agents[2*pair]
-    
+
     # Skip invalid pairs
-    if(identical(agent_A, agent_B)) next #same agent
-    if(all(binary_matrix[agent_A, ] == 0) && all(binary_matrix[agent_B, ] == 0)) next #empty collections
-    if(identical(binary_matrix[agent_A, ], binary_matrix[agent_B, ])) next #same collection profiles
+    if (any(is.na(c(agent_A, agent_B)))) next
+       if(identical(agent_A, agent_B)) {
+         next
+       }
+       if (all(binary_matrix[agent_A, ] == 0) && all(binary_matrix[agent_B, ] == 0)) {
+         next
+       }
+       if (identical(binary_matrix[agent_A, ], binary_matrix[agent_B, ])) {
+         next
+       }
     
     # Find unique items
     items_A <- which(binary_matrix[agent_A, ] == 1 & binary_matrix[agent_B, ] == 0)
     items_B <- which(binary_matrix[agent_B, ] == 1 & binary_matrix[agent_A, ] == 0)
-    
+
+
     # Determine transmission direction
     if(length(items_A) > 0 && length(items_B) == 0) {
       giver <- agent_A
@@ -124,11 +162,12 @@ for(gen in (burn_in + 1):num_generations) {
     }
 
     ### Perform transmission ----
+    # if there is only one item 
     if (length(items_to_transmit) == 1) {
-      transmitted_item <- items_to_transmit[0]
-    }
+      transmitted_item <- items_to_transmit[1]
+      
     # Take appeal into account if enabled
-    else if(set_appeal) {
+    } else if(set_appeal) {
       # Get appeal weights
       item_weights <- appeal_scores[names(items_to_transmit)]
       # Normalize weights so that it sums to 1
@@ -137,7 +176,23 @@ for(gen in (burn_in + 1):num_generations) {
     } else {
       transmitted_item <- sample(items_to_transmit, 1)
     }
-    binary_matrix[receiver, transmitted_item] <- 1
+
+    allow_transmition <- TRUE
+    
+    # Gateway check before transmission
+    if (set_gateway) {
+      allow_transmition <- FALSE
+      item_index <- which(colnames(binary_matrix) == paste0("item_", transmitted_item))
+      previous_sum <- sum(binary_matrix[receiver, 1:(item_index-1)]) + 1
+      num_prev_items <- item_index - 1
+      if(previous_sum >= (gateway_threshold * num_prev_items)) {
+        allow_transmition <- TRUE }
+    }
+
+    if (allow_transmition){
+      binary_matrix[receiver, transmitted_item] <- 1
+    }
+    
     
     ### Enforce quotas ----
     if(set_quota) {
@@ -157,11 +212,9 @@ for(gen in (burn_in + 1):num_generations) {
           }
           binary_matrix[agent, dropped] <- 0
           current_items <- which(binary_matrix[agent, ] == 1)
-        }
-      }
-    }
-  }
+        } } } }
 }
+
 
 ## Calculate final results ####
 item_prevalence <- colSums(binary_matrix)
@@ -283,6 +336,17 @@ rarity_plot <- ggplot(agent_stats, aes(x = InventorySize, y = AvgRarity)) +
   theme_minimal()
 rarity_plot
 
+### 4. Newest plot ####
+data
+
+rarity_plot <- ggplot(agent_stats, aes(x = InventorySize, y = AvgRarity)) +
+  geom_point(color = "olivedrab", alpha = 0.7) +
+  geom_smooth(method = "loess", color = "olivedrab", se = FALSE) +
+  labs(title = "Average Item Rarity vs Inventory Size",
+       x = "Number of items possessed (Inventory Size)",
+       y = "Average Rarity Score") +
+  theme_minimal()
+rarity_plot
 
 
 ### Save plots ----
