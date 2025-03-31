@@ -25,7 +25,7 @@ transmission_rate <- 0.05 # between 0 and 1
 mutation_rate <- 0.001 # between 0 and 1, has to be very low
 
 set_quota <- TRUE
-quota_mean <- 100 # between 0 and num_items
+quota_mean <- 10 # between 0 and num_items
 
 set_appeal <- FALSE # appeal = selection
 set_gateway <- TRUE
