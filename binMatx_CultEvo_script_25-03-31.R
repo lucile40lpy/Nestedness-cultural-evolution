@@ -18,34 +18,26 @@ library(lattice)
 
 num_agents <- 200
 num_items <- 20
-num_generations <- 20
+num_generations <- 500
 burn_in <- 0 # between 0 and num_generations
 
-transmission_rate <- 0.6 # between 0 and 1
+transmission_rate <- 0.05 # between 0 and 1
 mutation_rate <- 0.001 # between 0 and 1, has to be very low
 
-set_quota <- FALSE
-quota_mean <- 14 # between 0 and num_items
+set_quota <- TRUE
+quota_mean <- 100 # between 0 and num_items
 
-set_appeal <- FALSE # appeal_mean is now directly written in the code
+set_appeal <- FALSE # appeal = selection
 set_gateway <- TRUE
-gateway_threshold <- 0.5 # between 0 and 1
+gateway_threshold <- 0.5 # between 0 and 1 : strength of gateway grows with the threshold
 
 
 ## Cultural evolution simulation ====
 
 ### Initialize binary matrix ----
-if(set_gateway) {
-  binary_matrix <- matrix(0, nrow = num_agents, ncol = num_items+1,
+binary_matrix <- matrix(0, nrow = num_agents, ncol = num_items,
                         dimnames = list(paste0("agent_", 1:num_agents),
-                                        c(paste0("item_", 1:num_items), "item_0")))
-  binary_matrix[, "item_0"] <- 1
-  
-} else {
-  binary_matrix <- matrix(0, nrow = num_agents, ncol = num_items,
-                          dimnames = list(paste0("agent_", 1:num_agents),
-                                          paste0("item_", 1:num_items)))
-}
+                                        paste0("item_", 1:num_items)))
 
 ### Assign quotas if enabled ----
 if(set_quota) {
@@ -53,6 +45,7 @@ if(set_quota) {
   quotas <- rnorm(num_agents, mean = quota_mean, sd = std_dev_q)
   quotas <- pmin(pmax(round(quotas), 1), num_items)
   names(quotas) <- paste0("agent_", 1:num_agents)
+  print(quotas)
 }
 
 ### Initialize appeal scores if enabled ----
@@ -73,16 +66,17 @@ for(gen in 1:burn_in) {
       if (runif(1) < mutation_rate){
         if (binary_matrix[agent, item]==0){
           
+          # If item_1 then no gateway
+          if (item == 1) {
+            binary_matrix[agent, item] <- 1
           # Mutation with gateway
-          if (set_gateway) {
+          } else {
             prev_sum <- sum(binary_matrix[agent, 1:(item-1)]) + 1
             num_prev <- item - 1
             # Apply gateway threshold
             if(num_prev == 0 || prev_sum >= (gateway_threshold * num_prev)) {
               binary_matrix[agent, item] <- 1
             }
-          } else {
-            binary_matrix[agent, item] <- 1
           }
         } else {
           binary_matrix[agent, item] <- 0
@@ -98,16 +92,17 @@ for(gen in (burn_in + 1):num_generations) {
       if (runif(1) < mutation_rate){
         if (binary_matrix[agent, item]==0){
           
-          # Mutation with gateway
-          if (set_gateway) {
+          # If item_1 then no gateway
+          if (item == 1) {
+            binary_matrix[agent, item] <- 1
+            # Mutation with gateway
+          } else {
             prev_sum <- sum(binary_matrix[agent, 1:(item-1)]) + 1
             num_prev <- item - 1
             # Apply gateway threshold
-            if(prev_sum >= (gateway_threshold * num_prev)) {
+            if(num_prev == 0 || prev_sum >= (gateway_threshold * num_prev)) {
               binary_matrix[agent, item] <- 1
             }
-          } else {
-            binary_matrix[agent, item] <- 1
           }
         } else {
           binary_matrix[agent, item] <- 0
@@ -177,20 +172,18 @@ for(gen in (burn_in + 1):num_generations) {
       transmitted_item <- sample(items_to_transmit, 1)
     }
 
-    allow_transmition <- TRUE
-    
     # Gateway check before transmission
-    if (set_gateway) {
-      allow_transmition <- FALSE
+    # If item_1 then no gateway
+    if (item == 1) {
+      binary_matrix[agent, item] <- 1
+    # Otherwise apply gateway
+    } else {
       item_index <- which(colnames(binary_matrix) == paste0("item_", transmitted_item))
       previous_sum <- sum(binary_matrix[receiver, 1:(item_index-1)]) + 1
       num_prev_items <- item_index - 1
       if(previous_sum >= (gateway_threshold * num_prev_items)) {
-        allow_transmition <- TRUE }
-    }
-
-    if (allow_transmition){
-      binary_matrix[receiver, transmitted_item] <- 1
+        binary_matrix[receiver, transmitted_item] <- 1 
+        }
     }
     
     
@@ -336,18 +329,6 @@ rarity_plot <- ggplot(agent_stats, aes(x = InventorySize, y = AvgRarity)) +
   theme_minimal()
 rarity_plot
 
-### 4. Newest plot ####
-data
-
-rarity_plot <- ggplot(agent_stats, aes(x = InventorySize, y = AvgRarity)) +
-  geom_point(color = "olivedrab", alpha = 0.7) +
-  geom_smooth(method = "loess", color = "olivedrab", se = FALSE) +
-  labs(title = "Average Item Rarity vs Inventory Size",
-       x = "Number of items possessed (Inventory Size)",
-       y = "Average Rarity Score") +
-  theme_minimal()
-rarity_plot
-
 
 ### 3.bis Prevalence vs Average Inventory Size ----
 # Calculate average inventory size for agents possessing each item
@@ -374,11 +355,14 @@ prevalence_inventory_plot <- ggplot(item_stats, aes(x = Prevalence, y = AvgInven
 prevalence_inventory_plot
 
 
-
 ### Save plots ----
+# Define your base directory
+base_dir <- "C:/Users/lucil/OneDrive/Documents/CPES 2/Stage/my codes"
 # Create plot directory with timestamp
-plot_dir <- paste0("plots_", format(Sys.time(), "%Y-%m-%d_%H-%M-%S"))
+plot_dir <- file.path(base_dir, paste0("plots_", format(Sys.time(), "%Y-%m-%d_%H-%M-%S")))
 dir.create(plot_dir)
+
+
 
 #Save all above plots
 combined_plot <- grid.arrange(p1, p2, ncol = 2)
