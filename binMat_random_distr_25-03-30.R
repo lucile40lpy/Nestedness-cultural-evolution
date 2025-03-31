@@ -16,8 +16,8 @@ library(lattice)
 nrows <- 200
 ncols <- 20
 area <- "both"
-distr_type <- "gaussian"
-alpha <- 2
+distr_type <- "powerlaw"
+alpha <- 0.6
 
 
 ## Random matrices ####
@@ -129,7 +129,7 @@ prevalence_plot <- ggplot(data.frame(Prevalence = item_prevalence),
 prevalence_plot
 
 
-### 1. bis. Item prevalence ----
+### 1. bis Item prevalence ----
 # Create a data frame with item IDs and their prevalence
 item_data <- data.frame(
   Item = factor(1:length(item_prevalence)),  # Convert to factor for discrete axis
@@ -188,6 +188,32 @@ rarity_plot <- ggplot(agent_stats, aes(x = InventorySize, y = AvgRarity)) +
 rarity_plot
 
 
+### 3. bis Prevalence vs Average Inventory Size ----
+# Calculate average inventory size for agents possessing each item
+avg_inventory <- apply(binary_matrix, 2, function(item_col) {
+  mean(rowSums(binary_matrix)[item_col == 1])
+})
+
+# Create data frame for plotting
+item_stats <- data.frame(
+  Prevalence = item_prevalence,
+  AvgInventory = avg_inventory
+)
+
+# Create the scatter plot
+prevalence_inventory_plot <- ggplot(item_stats, aes(x = Prevalence, y = AvgInventory)) +
+  geom_point(color = "olivedrab", alpha = 0.7, size = 3) +
+  geom_smooth(method = "lm", color = "gray50") +
+  labs(title = "Item Prevalence vs Average Inventory Size",
+       x = "Item prevalence :\nnumber of agents possessing the item",
+       y = "Average inventory size\nof agents possessing the item") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5))
+
+prevalence_inventory_plot
+
+
+
 ### Saving plots ----
 # Create plot directory with timestamp
 plot_dir <- paste0("plots_", format(Sys.time(), "%Y-%m-%d_%H-%M-%S"))
@@ -205,46 +231,57 @@ ggsave(file.path(plot_dir, "05_inventory_plot.png"),
        inventory_plot, width = 8, height = 6)
 ggsave(file.path(plot_dir, "06_rarity_vs_inventory.png"), 
        rarity_plot, width = 8, height = 6)
-
+ggsave(file.path(plot_dir, "07_prevalence_vs_inventory.png"), 
+       prevalence_inventory_plot, width = 8, height = 6)
 
 
 ## Nestedness tests ####
 
 ### NODF ----
 # r00
+
 out_nodf_r00 <- oecosimu(binary_matrix, nestednodf, "r00", alt = "greater")
 print(out_nodf_r00)
-densityplot(permustats(out_nodf_r00), main = "NODF Permutations - r00")
+densityplot(permustats(out_nodf_r00), main = "NODF Permutations - r00",
+            layout = c(1, 3), aspect = "fill", as.table = TRUE)
 
-png(file.path(plot_dir, paste0("01_NODF_r00.png")), width = 800, height = 600)
-print(densityplot(permustats(out_nodf_r00), main = "NODF Permutations - r00"))
+png(file.path(plot_dir, "01_NODF_r00.png"), width = 400, height = 800)
+print(densityplot(permustats(out_nodf_r00), main = "NODF Permutations - r00",
+                  layout = c(1, 3), aspect = "fill", as.table = TRUE))
 dev.off()
+
 
 # r0
 out_nodf_r0 <- oecosimu(binary_matrix, nestednodf, "r0", alt = "greater")
 print(out_nodf_r0)
-densityplot(permustats(out_nodf_r0), main = "NODF Permutations - r0")
+densityplot(permustats(out_nodf_r0), main = "NODF Permutations - r0",
+            layout = c(1, 3), aspect = "fill", as.table = TRUE)
 
-png(file.path(plot_dir, paste0("01_NODF_r0.png")), width = 800, height = 600)
-print(densityplot(permustats(out_nodf_r0), main = "NODF Permutations - r0"))
+png(file.path(plot_dir, paste0("01_NODF_r0.png")), width = 400, height = 800)
+print(densityplot(permustats(out_nodf_r0), main = "NODF Permutations - r0",
+                  layout = c(1, 3), aspect = "fill", as.table = TRUE))
 dev.off()
 
 # r1
 out_nodf_r1 <- oecosimu(binary_matrix, nestednodf, "r1", alt = "greater")
 print(out_nodf_r1)
-densityplot(permustats(out_nodf_r1), main = "NODF Permutations - r1")
+densityplot(permustats(out_nodf_r1), main = "NODF Permutations - r1",
+            layout = c(1, 3), aspect = "fill", as.table = TRUE)
 
-png(file.path(plot_dir, paste0("01_NODF_r1.png")), width = 800, height = 600)
-print(densityplot(permustats(out_nodf_r1), main = "NODF Permutations - r1"))
+png(file.path(plot_dir, paste0("01_NODF_r1.png")), width = 400, height = 800)
+print(densityplot(permustats(out_nodf_r1), main = "NODF Permutations - r1",
+                  layout = c(1, 3), aspect = "fill", as.table = TRUE))
 dev.off()
 
 # c0
 out_nodf_c0 <- oecosimu(binary_matrix, nestednodf, "c0", alt = "greater")
 print(out_nodf_c0)
-densityplot(permustats(out_nodf_c0), main = "NODF Permutations - c0")
+densityplot(permustats(out_nodf_c0), main = "NODF Permutations - c0",
+            layout = c(1, 3), aspect = "fill", as.table = TRUE)
 
-png(file.path(plot_dir, paste0("01_NODF_c0.png")), width = 800, height = 600)
-print(densityplot(permustats(out_nodf_c0), main = "NODF Permutations - c0"))
+png(file.path(plot_dir, paste0("01_NODF_c0.png")), width = 400, height = 800)
+print(densityplot(permustats(out_nodf_c0), main = "NODF Permutations - c0",
+                  layout = c(1, 3), aspect = "fill", as.table = TRUE))
 dev.off()
 
 # swap
@@ -254,19 +291,23 @@ dev.off()
 #long that a swap can be done.
 out_nodf_swap <- oecosimu(binary_matrix, nestednodf, "swap", alt = "greater")
 print(out_nodf_swap)
-densityplot(permustats(out_nodf_swap), main = "NODF Permutations - swap")
+densityplot(permustats(out_nodf_swap), main = "NODF Permutations - swap",
+            layout = c(1, 3), aspect = "fill", as.table = TRUE)
 
-png(file.path(plot_dir, paste0("01_NODF_swap.png")), width = 800, height = 600)
-print(densityplot(permustats(out_nodf_swap), main = "NODF Permutations - swap"))
+png(file.path(plot_dir, paste0("01_NODF_swap.png")), width = 400, height = 800)
+print(densityplot(permustats(out_nodf_swap), main = "NODF Permutations - swap",
+                  layout = c(1, 3), aspect = "fill", as.table = TRUE))
 dev.off()
 
 # curveball
 out_nodf_cb <- oecosimu(binary_matrix, nestednodf, "curveball", alt = "greater")
 print(out_nodf_cb)
-densityplot(permustats(out_nodf_cb), main = "NODF Permutations - curveball")
+densityplot(permustats(out_nodf_cb), main = "NODF Permutations - curveball",
+            layout = c(1, 3), aspect = "fill", as.table = TRUE)
 
-png(file.path(plot_dir, paste0("01_NODF_cb.png")), width = 800, height = 600)
-print(densityplot(permustats(out_nodf_cb), main = "NODF Permutations - cb"))
+png(file.path(plot_dir, paste0("01_NODF_cb.png")), width = 400, height = 800)
+print(densityplot(permustats(out_nodf_cb), main = "NODF Permutations - cb",
+                  layout = c(1, 3), aspect = "fill", as.table = TRUE))
 dev.off()
 
 
