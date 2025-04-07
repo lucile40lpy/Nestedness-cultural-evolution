@@ -25,10 +25,9 @@ transmission_rate <- 0.05 # between 0 and 1
 mutation_rate <- 0.001 # between 0 and 1, has to be very low
 
 set_quota <- TRUE
-quota_mean <- 10 # between 0 and num_items
+quota_mean <- num_items/2 # between 0 and num_items
 
 set_appeal <- FALSE # appeal = selection
-set_gateway <- TRUE
 gateway_threshold <- 0.5 # between 0 and 1 : strength of gateway grows with the threshold
 
 
@@ -38,6 +37,8 @@ gateway_threshold <- 0.5 # between 0 and 1 : strength of gateway grows with the 
 binary_matrix <- matrix(0, nrow = num_agents, ncol = num_items,
                         dimnames = list(paste0("agent_", 1:num_agents),
                                         paste0("item_", 1:num_items)))
+
+binary_matrices <- list()
 
 ### Assign quotas if enabled ----
 if(set_quota) {
@@ -74,7 +75,7 @@ for(gen in 1:burn_in) {
             prev_sum <- sum(binary_matrix[agent, 1:(item-1)]) + 1
             num_prev <- item - 1
             # Apply gateway threshold
-            if(num_prev == 0 || prev_sum >= (gateway_threshold * num_prev)) {
+            if(prev_sum >= (gateway_threshold * num_prev)) {
               binary_matrix[agent, item] <- 1
             }
           }
@@ -100,7 +101,7 @@ for(gen in (burn_in + 1):num_generations) {
             prev_sum <- sum(binary_matrix[agent, 1:(item-1)]) + 1
             num_prev <- item - 1
             # Apply gateway threshold
-            if(num_prev == 0 || prev_sum >= (gateway_threshold * num_prev)) {
+            if(prev_sum >= (gateway_threshold * num_prev)) {
               binary_matrix[agent, item] <- 1
             }
           }
@@ -181,8 +182,9 @@ for(gen in (burn_in + 1):num_generations) {
       item_index <- which(colnames(binary_matrix) == paste0("item_", transmitted_item))
       previous_sum <- sum(binary_matrix[receiver, 1:(item_index-1)]) + 1
       num_prev_items <- item_index - 1
+      
       if(previous_sum >= (gateway_threshold * num_prev_items)) {
-        binary_matrix[receiver, transmitted_item] <- 1 
+        binary_matrix[receiver, transmitted_item] <- 1
         }
     }
     
@@ -206,6 +208,9 @@ for(gen in (burn_in + 1):num_generations) {
           binary_matrix[agent, dropped] <- 0
           current_items <- which(binary_matrix[agent, ] == 1)
         } } } }
+
+  # Store the current matrix in the list
+  binary_matrices[[gen]] <- binary_matrix
 }
 
 
@@ -353,6 +358,7 @@ prevalence_inventory_plot <- ggplot(item_stats, aes(x = Prevalence, y = AvgInven
   theme(plot.title = element_text(hjust = 0.5))
 
 prevalence_inventory_plot
+
 
 
 ### Save plots ----
