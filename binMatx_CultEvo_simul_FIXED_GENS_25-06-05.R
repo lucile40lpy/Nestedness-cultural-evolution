@@ -1,7 +1,7 @@
 # ======== Cultural Evolution ========
 
 ## ==== 1. Library import ====
-library(dplyr)
+library(tidyverse)
 library(progress)
 
 library(vegan)
@@ -250,8 +250,8 @@ compute_p_val_temp <- function(mat, b) {
   }, error = function(e) NA_real_)
 }
 
-## ==== 4. Simulation loop ====
 
+## ==== 4. Simulation loop ====
 
 ### ---- A. Parameters lists ----
 matrix_size <- list(c(500, 200), c(50, 20))
@@ -259,13 +259,12 @@ matrix_size <- list(c(500, 200), c(50, 20))
 interact_rate <- c(0.001, 0.005, 0.01, 0.05, 0.1)
 mutat_rate <- c(0.001, 0.005, 0.01)
 
-quota_ratio = c(0.1, 0.5)
-gateway_threshold = c(0, 0.1, 0.5, 0.9, 1)
-set_appeal = c(FALSE, TRUE)
-appeal_mean = list(NA, c(0.1, 0.5, 0.9))  # NA when set_appeal=FALSE
+quota_ratio <- c(0.1, 0.5)
+gateway_threshold <- c(0, 0.1, 0.5, 0.9, 1)
+set_appeal <- c(FALSE, TRUE)
+appeal_mean <- list(NA, c(0.1, 0.5, 0.9))  # NA when set_appeal=FALSE
 
-baselines = c('r0', 'r1', 'curveball')
-
+baselines <- c('r0', 'r1', 'curveball')
 
 ### ---- B. Initialize empty results dataframe ----
 df_results <- data.frame(
@@ -281,7 +280,6 @@ df_results <- data.frame(
   appeal_std_dev = numeric(),
   gateway_threshold = numeric(),
   burn_in = integer(),
-  null_model = character(),
   num_agents_final = integer(),
   num_items_final = integer(),
   coef_cor = numeric(),
@@ -303,7 +301,7 @@ if (!dir.exists("matrices_final")) {
 ### ---- C. Progress bar ----
 total_iter <- length(matrix_size) * length(interact_rate) * length(mutat_rate) * 
   length(quota_ratio) * length(gateway_threshold) * length(set_appeal) * 
-  length(metrics) * length(baselines) * 3  # 3 appeal means when set_appeal=TRUE
+  length(baselines) * 3  # 3 appeal means when set_appeal=TRUE
 
 pb <- progress_bar$new(
   format = "[:bar] :percent | ETA: :eta | Elapsed: :elapsedfull",
@@ -311,6 +309,9 @@ pb <- progress_bar$new(
   clear = FALSE,
   width = 100
 )
+
+# OR
+#counter <- 0
 
 ### ---- D. Simulation loops ----
 # general parameters
@@ -363,7 +364,6 @@ for (a in matrix_size) {
                 set_appeal = appeal_flag,
                 appeal_mean = ifelse(appeal_flag, am, NA),
                 appeal_std_dev = 0.2,
-                null_model = b,
                 num_agents_final = num_agents_f,
                 num_items_final = num_items_f,
                 coef_cor = cor_coef, 
@@ -372,21 +372,24 @@ for (a in matrix_size) {
               
               ### ---- I. Nestedness test ----
               for (b in baselines) {
-                # Progress bar
-                pb$tick()
-                
                 # NODF
                 p_val_nodf <- compute_p_val_nodf(binary_matrix_clean, b)
                 new_row[[paste0("p_value_nodf_", b)]] <- p_val_nodf
                 # Temp
                 p_val_temp <- compute_p_val_temp(binary_matrix_clean, b)
                 new_row[[paste0("p_value_temp_", b)]] <- p_val_temp
+                
+                # Progress bar
+                pb$tick()
+                # OR
+                #counter <- counter + 1
+                #print(counter)
               }
               
               ### ---- J. Append to results and export matrices ----
               df_results <- rbind(df_results, new_row)
               
-              matrix_id <- paste0("matrices_final/",a[1],"_",a[2],"_",i,"_",m,"_",quota,"_",gateway,"_",appeal_flag,"_",appeal_mean, ".csv")
+              matrix_id <- paste0("matrices_final/",a[1],"_",a[2],"_",i,"_",m,"_",quota,"_",gateway,"_",appeal_flag,"_",am, ".csv")
               write.csv(binary_matrix_clean, matrix_id)
             }
           }
