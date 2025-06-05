@@ -1,10 +1,7 @@
-# ====== Cultural Evolution ======
+# ======== Cultural Evolution ========
 
-## 1. Library import ====
+## ==== 1. Library import ====
 library(dplyr)
-library(gridExtra)
-library(ggplot2)
-library(reshape2)
 library(progress)
 
 library(vegan)
@@ -12,7 +9,7 @@ library(permute)
 library(lattice)
 
 
-## 3. Cultural evolution simulation function ====
+## ==== 2. Cultural evolution simulation model ====
 run_simulation <- function(
     num_agents, num_items, num_generations, 
     interaction_rate, mutation_rate, 
@@ -21,11 +18,11 @@ run_simulation <- function(
     gateway_threshold, burn_in=0) 
   {
   
-  ### Initialize binary matrix ----
+  ### ---- A. Initialize binary matrix ----
   binary_matrix <- matrix(0, nrow = num_agents, ncol = num_items,
     dimnames = list(paste0("agent_", 1:num_agents), paste0("item_", 1:num_items)))
   
-  ### Assign quotas if enabled ----
+  ### ---- B. Assign quotas ----
   quotas <- NULL
   if (set_quota) {
     quota_mean <- quota_ratio*num_items
@@ -36,7 +33,7 @@ run_simulation <- function(
     names(quotas) <- paste0("agent_", 1:num_agents)
   }
   
-  ### Initialize appeal scores if enabled ----
+  ### ---- C. Initialize appeal scores ----
   appeal_scores <- NULL
   if (set_appeal) {
     appeal_scores <- rnorm(num_items, appeal_mean, appeal_std_dev)
@@ -44,7 +41,7 @@ run_simulation <- function(
     names(appeal_scores) <- paste0("item_", 1:num_items)
   }
   
-  ### Burn-in period (mutations only) ----
+  ### ---- D. Burn-in period (mutations only) ----
   for (gen in 1:burn_in) {
     for (agent in 1:num_agents) {
       for (item in 1:num_items) {
@@ -67,8 +64,9 @@ run_simulation <- function(
     }
   }
   
-  ### Main simulation loop ----
+  ### ---- E. Main simulation loop ----
   for (gen in (burn_in + 1):num_generations) {
+    
     # Mutation process
     for (agent in 1:num_agents) {
       for (item in 1:num_items) {
@@ -90,7 +88,7 @@ run_simulation <- function(
       }
     }
     
-    ### Pairwise interactions ----
+    ### ---- F. Pairwise interactions ----
     num_pairs <- ceiling(interaction_rate * num_agents^2)
     shuffled_agents <- sample(rownames(binary_matrix))
     
@@ -129,7 +127,7 @@ run_simulation <- function(
         next
       }
       
-      ### Perform interaction ----
+      ### ---- G. Perform interaction ----
       if (length(items_to_transmit) == 1) {
         transmitted_item <- items_to_transmit[1]
       } else if (set_appeal) {
@@ -140,7 +138,7 @@ run_simulation <- function(
         transmitted_item <- sample(items_to_transmit, 1)
       }
       
-      # Gateway check before interaction (corrected from original code)
+      ### ---- H. Gateway check ----
       if (transmitted_item == 1) {
         binary_matrix[receiver, transmitted_item] <- 1
       } else {
@@ -152,7 +150,7 @@ run_simulation <- function(
         }
       }
       
-      ### Enforce quotas ----
+      ### ---- I. Enforce quotas ----
       if (set_quota) {
         for (agent in c(agent_A, agent_B)) {
           current_items <- which(binary_matrix[agent, ] == 1)
@@ -175,18 +173,15 @@ run_simulation <- function(
     }
   }
   
-  ### Calculate final results ----
-  item_prevalence <- colSums(binary_matrix)
-  inventory_size <- rowSums(binary_matrix)
-  
+  ### ---- J. Final results ----
   return(list(
-    binary_matrix = binary_matrix,
-    item_prevalence = item_prevalence,
-    inventory_size = inventory_size
-  ))
+    binary_matrix = binary_matrix))
 }
 
-## Sort function ----
+
+## ==== 3. Functions ====
+
+### ---- A. Sort function ----
 sort_matrix <- function(M, iter) {
   for(i in 1:iter) {
     M <- M[, order(colSums(M), decreasing = TRUE)]
@@ -195,35 +190,120 @@ sort_matrix <- function(M, iter) {
   return(M)
 }
 
-## 4. Simulation loop ====
+### ---- B. Compute correlation ----
+compute_cor_coef <- function(mat) {
+  avg_inventory <- apply(mat, 2, function(item_col) {
+    mean(rowSums(mat)[item_col == 1])})
+  
+  item_stats <- data.frame(
+    Prevalence = colSums(mat),
+    AvgInventory = avg_inventory
+  )
+  return(cor(item_stats$Prevalence, item_stats$AvgInventory))
+}
+
+### ---- C. Clean matrix ----
+clean_matrix <- function(mat) {
+  # Remove empty rows (agents with no items)
+  non_empty_rows <- rowSums(mat) > 0
+  cleaned <- mat[non_empty_rows, , drop = FALSE]
+  
+  # Remove empty columns (items with no adoptions)
+  non_empty_cols <- colSums(cleaned) > 0
+  cleaned <- cleaned[, non_empty_cols, drop = FALSE]
+  
+  # Return cleaned matrix and dimensions
+  return(list(
+    matrix = cleaned,
+    num_agents = sum(non_empty_rows),
+    num_items = sum(non_empty_cols)
+  ))
+}
+
+### ---- D. Compute nodf p-value ----
+options(mc.cores = max(2, parallel::detectCores() - 2))
+
+compute_p_val_nodf <- function(mat, b) {
+  tryCatch({
+    if(nrow(mat) > 1 && ncol(mat) > 1) {
+      out_nodf <- oecosimu(comm = mat, nestfun = nestednodf, 
+                           method = b, alt = "greater", nsimul = 200,
+                           batchsize = 50, parallel = TRUE)
+      out_nodf$oecosimu$pval[3]
+    } else {
+      NA_real_
+    }
+  }, error = function(e) NA_real_)
+}
+
+### ---- E. Compute temp p-value ----
+compute_p_val_temp <- function(mat, b) {
+  tryCatch({
+    if(nrow(mat) > 1 && ncol(mat) > 1) {
+      out_temp <- oecosimu(comm = mat, nestfun = nestedtemp, 
+                           method = b, alt = "less", nsimul = 200,
+                           batchsize = 50, parallel = TRUE)
+      out_temp$oecosimu$pval
+    } else {
+      NA_real_
+    }
+  }, error = function(e) NA_real_)
+}
+
+## ==== 4. Simulation loop ====
 
 
-#### Parameters lists ----
-# Agents and items as list of pairs
+### ---- A. Parameters lists ----
 matrix_size <- list(c(500, 200), c(50, 20))
 
-num_gen <- c(25, 50, 100, 150, 200, 250, 300, 500)
-interact_rate <- c(0.001, 0.005, 0.01, 0.05, 0.1, 0.5)
-mutat_rate <- c(0.001, 0.005, 0.01, 0.05, 0.1, 0.5)
+interact_rate <- c(0.001, 0.005, 0.01, 0.05, 0.1)
+mutat_rate <- c(0.001, 0.005, 0.01)
 
 quota_ratio = c(0.1, 0.5)
 gateway_threshold = c(0, 0.1, 0.5, 0.9, 1)
 set_appeal = c(FALSE, TRUE)
 appeal_mean = list(NA, c(0.1, 0.5, 0.9))  # NA when set_appeal=FALSE
 
-metrics = c('NODf', 'Temp')
-baselines = c('r00', 'r0', 'c0', 'curveball')
+baselines = c('r0', 'r1', 'curveball')
 
 
-## Load existing CSV file ----
-df_results <- read.csv2("nestedness_results.csv", stringsAsFactors = FALSE)
+### ---- B. Initialize empty results dataframe ----
+df_results <- data.frame(
+  num_agents = integer(),
+  num_items = integer(),
+  num_generations = integer(),
+  interaction_rate = numeric(),
+  mutation_rate = numeric(),
+  set_quota = logical(),
+  quota_ratio = numeric(),
+  set_appeal = logical(),
+  appeal_mean = numeric(),
+  appeal_std_dev = numeric(),
+  gateway_threshold = numeric(),
+  burn_in = integer(),
+  null_model = character(),
+  num_agents_final = integer(),
+  num_items_final = integer(),
+  coef_cor = numeric(),
+  p_value_temp_r0 = numeric(),
+  p_value_nodf_r0 = numeric(),
+  p_value_temp_r1 = numeric(),
+  p_value_nodf_r1 = numeric(),
+  p_value_temp_curveball = numeric(),
+  p_value_nodf_curveball = numeric(),
+  stringsAsFactors = FALSE
+)
+
+# Ensure matrices directory exists
+if (!dir.exists("matrices_final")) {
+  dir.create("matrices_final")
+}
 
 
-### For loops ----
-# Initialize progress bar
+### ---- C. Progress bar ----
 total_iter <- length(matrix_size) * length(interact_rate) * length(mutat_rate) * 
-  length(num_gen) * length(quota_ratio) * length(gateway_threshold) * 
-  length(set_appeal) * length(metrics) * length(baselines) * 3  # 3 appeal means when set_appeal=TRUE
+  length(quota_ratio) * length(gateway_threshold) * length(set_appeal) * 
+  length(metrics) * length(baselines) * 3  # 3 appeal means when set_appeal=TRUE
 
 pb <- progress_bar$new(
   format = "[:bar] :percent | ETA: :eta | Elapsed: :elapsedfull",
@@ -232,23 +312,20 @@ pb <- progress_bar$new(
   width = 100
 )
 
-
-print(start)
-# Main simulation loop
+### ---- D. Simulation loops ----
+# general parameters
 for (a in matrix_size) {
-  for (quota in quota_ratio) {
-    for (gateway in gateway_threshold) {
-      for (appeal_flag in set_appeal) {
-        # Handle appeal means
-        appeal_means <- if(appeal_flag) c(0.1, 0.5, 0.9) else NA
-        
-        for (am in appeal_means) {
-          for (metr in metrics) {
-            for (base in baselines) {
+  for (i in interact_rate) {
+    for (m in mutat_rate) {
+      
+      # parameters of interest
+      for (quota in quota_ratio) {
+        for (gateway in gateway_threshold) {
+          for (appeal_flag in set_appeal) {
+            appeal_means <- if(appeal_flag) c(0.1, 0.5, 0.9) else NA
+            for (am in appeal_means) {
               
-              pb$tick()
-              
-              # Run simulation
+              ### ---- E. Run model ----
               res <- run_simulation(
                 num_agents = a[1],
                 num_items = a[2],
@@ -263,63 +340,54 @@ for (a in matrix_size) {
                 gateway_threshold = gateway
               )
               
-              # Process matrix
-              matrix = res$binary_matrix
-              item_prevalence = res$item_prevalence
-              inventory_size = res$inventory_size
-              sorted_matrix = sort_matrix(matrix, 20)
+              ### ---- F. Sort and clean matrices ----
+              final_clean <- clean_matrix(res$binary_matrix)
+              binary_matrix_clean <- sort_matrix(final_clean$matrix, 10)
               
+              num_agents_f <- final_clean$num_agents
+              num_items_f <- final_clean$num_items
               
-              # Calculate nestedness
-              if(metr == 'NODF') {
-                null_result <- oecosimu(binary_matrix, nestednodf, 
-                                        method = base, alt = "greater")
-                p_val <- null_result$oecosimu$pval[3]
-              } else {
-                null_result <- oecosimu(binary_matrix, nestedtemp, 
-                                        method = base, alt = "less")
-                p_val <- null_result$oecosimu$pval
-              }
+              ### ---- G. Coefficient of correlation ----
+              cor_coef <- compute_cor_coef(binary_matrix_clean)
               
-              #### Calculate plot coeff ----
-              # Calculate average inventory size for agents possessing each item
-              avg_inventory <- apply(binary_matrix, 2, function(item_col) {
-                mean(rowSums(binary_matrix)[item_col == 1])
-              })
-              # Create data frame for plotting
-              item_stats <- data.frame(
-                Prevalence = item_prevalence,
-                AvgInventory = avg_inventory
-              )
-              # Fit linear model
-              lm_model <- lm(AvgInventory ~ Prevalence, data = item_stats)
-              coeff <- coefficients(lm_model)[2]
-              
-              
-              #### Create new row ----
+              ### ---- H. Create new row ----
               new_row <- data.frame(
                 num_agents = a[1],
                 num_items = a[2],
                 num_generations = 50,
-                interaction_rate = 0.05,
-                mutation_rate = 0.01,
+                interaction_rate = i,
+                mutation_rate = m,
                 quota_ratio = quota,
                 gateway_threshold = gateway,
                 set_quota = TRUE,
                 set_appeal = appeal_flag,
                 appeal_mean = ifelse(appeal_flag, am, NA),
                 appeal_std_dev = 0.2,
-                metric = metr,
-                null_model = base,
-                p_value = p_val,
-                matrix = I(list(binary_matrix)),  # Store as list column
-                sorted_matrix = I(list(sorted_matrix)),
-                coeff_plot = coeff,
+                null_model = b,
+                num_agents_final = num_agents_f,
+                num_items_final = num_items_f,
+                coef_cor = cor_coef, 
                 stringsAsFactors = FALSE
               )
               
-              # Append results
+              ### ---- I. Nestedness test ----
+              for (b in baselines) {
+                # Progress bar
+                pb$tick()
+                
+                # NODF
+                p_val_nodf <- compute_p_val_nodf(binary_matrix_clean, b)
+                new_row[[paste0("p_value_nodf_", b)]] <- p_val_nodf
+                # Temp
+                p_val_temp <- compute_p_val_temp(binary_matrix_clean, b)
+                new_row[[paste0("p_value_temp_", b)]] <- p_val_temp
+              }
+              
+              ### ---- J. Append to results and export matrices ----
               df_results <- rbind(df_results, new_row)
+              
+              matrix_id <- paste0("matrices_final/",a[1],"_",a[2],"_",i,"_",m,"_",quota,"_",gateway,"_",appeal_flag,"_",appeal_mean, ".csv")
+              write.csv(binary_matrix_clean, matrix_id)
             }
           }
         }
@@ -328,8 +396,6 @@ for (a in matrix_size) {
   }
 }
 
-# Save results periodically
-write.csv2(df_results, "nestedness_results.csv", row.names = FALSE)
-#### Save Results ====
-View(df_results)
+### ---- K. Save Results ----
+write.csv2(df_results, "nestedness_results_fixed_gens.csv", row.names = FALSE)
 

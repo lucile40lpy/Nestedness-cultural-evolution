@@ -8,7 +8,7 @@ library(progress)
 library(parallel)
 
 
-## 2. Cultural evolution simulation function ====
+## 2. Cultural evolution simulation model ====
 cultural_evolution <- function(
     num_agents, num_items, num_generations, 
     interaction_rate, mutation_rate, 
@@ -244,10 +244,11 @@ compute_p_val_nodf <- function(mat, b) {
 }, error = function(e) NA_real_)
 }
 
-## 4. Optimized simulation loop ====
+
+## 4. Simulation loop ====
 
 ### A. Parameters lists ----
-matrix_size <- list(c(500, 200), c(50, 20))
+matrix_size <- list(c(50, 20), c(500, 200))
 num_gen <- c(30, 50, 100)
 interact_rate <- c(0.001, 0.005, 0.05, 0.1)
 mutat_rate <- c(0.001)
@@ -291,6 +292,10 @@ for (gen in gen_labels) {
 
 df_results <- do.call(data.frame, c(df_cols, stringsAsFactors = FALSE))
 
+# Ensure matrices directory exists
+if (!dir.exists("matrices")) {
+  dir.create("matrices")
+}
 
 ### C. Progress bar ----
 total_iter <- length(matrix_size) * length(interact_rate) * 
@@ -358,6 +363,9 @@ for(a in matrix_size) {
         
         ### H. Compute nestedness ----
         for(b in baselines) {
+          
+          pb$tick()
+          
           # For final matrix
           p_val_final <- compute_p_val_nodf(binary_matrix_clean, b)
           
@@ -412,15 +420,6 @@ for(a in matrix_size) {
           # Final matrix
           matrix_id <- paste0("matrices/",a[1],"_",a[2],"_",i,"_",m,"_",g, ".csv")
           write.csv(binary_matrix_clean, matrix_id)
-          
-          # Matrices for each stored generation
-          for (gen_str in stored_generations) {
-            gen_matrix <- stored_matrices[[gen_str]]
-            matrix_id <- paste0("matrices/",a[1],"_",a[2],"_",i,"_",m,"_",g,"_",gen_str, ".csv")
-            write.csv(gen_matrix, matrix_id)
-          }
-          
-          pb$tick()
         }
       }
     }
